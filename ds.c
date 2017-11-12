@@ -24,7 +24,12 @@ dsPT  dynamicSchedulerInit(
          FILE*              fp,
          int                s,
          int                n,
-         boolean            (*fetchFP)( dsPT, int*, int*, int*, int*, int*, int* ) 
+         boolean            (*fetchFP)( dsPT, int*, int*, int*, int*, int*, int* ), 
+         int                blockSize,
+         int                l1Size,
+         int                l1Assoc,
+         int                l2Size,
+         int                l2Assoc
       )
 {
    // Calloc the mem to reset all vars to 0
@@ -48,6 +53,12 @@ dsPT  dynamicSchedulerInit(
 
    for( int i = 0; i < 128; i++ )
       dsP->ready[i]                  = 1;
+
+   // Init cache
+   cachePT  l1P          = cacheInit( "L1", l1Size, l1Assoc, blockSize, 0, POLICY_REP_LRU, POLICY_WRITE_BACK_WRITE_ALLOCATE, NULL);
+   cachePT  l2P          = cacheInit( "L2", l2Size, l2Assoc, blockSize, 0, POLICY_REP_LRU, POLICY_WRITE_BACK_WRITE_ALLOCATE, NULL);
+   dsP->l1P              = l1P;
+   dsP->l2P              = l2P;
 
    return dsP;
 }
@@ -76,7 +87,7 @@ boolean dsInstInEx( dsPT dsP, dsInstInfoPT  instP )
       } else if( instP->type == 1 ){
          return ((dsP->cycle - instP->exStart) >= 2) ? TRUE : FALSE;
       } else{
-         return ((dsP->cycle - instP->exStart) >= 5) ? TRUE : FALSE;
+         return ((dsP->cycle - instP->exStart) >= instP->delay) ? TRUE : FALSE;
       }
    }
    return FALSE;
@@ -203,6 +214,18 @@ boolean issue( dsPT dsP )
       instP->isDuration = dsP->cycle - instP->isStart;
       instP->exStart    = dsP->cycle;
       instP->stage      = PROC_PIPE_STAGE_EX;
+      // Memory operation on cache
+      if( instP->type == 2 ){
+         cacheCommT comm = cacheCommunicate( dsP->l1P, instP->mem, CMD_DIR_READ );
+         if( !comm.hit ){
+            cacheCommT comm = cacheCommunicate( dsP->l2P, instP->mem, CMD_DIR_READ );
+            if( !comm.hit ){
+               instP->delay       = 20;
+            }else{
+               instP->delay       = 10;
+            }
+         }
+      }
       fifoPush( dsP->executeList, instP );
       // Remove from dispatch list
       fifoSearchOpRemove( dsP->issueList, dsInstSeqNum, NULL, &(instP->sequenceNum), TRUE );
@@ -329,11 +352,14 @@ boolean fetch( dsPT dsP )
          instP->src2        = src2;
          instP->origSrc1    = src1;
          instP->origSrc2    = src2;
+         instP->delay       = 5;
+         instP->mem         = mem;
          instP->sequenceNum = dsP->seqNum++;
          // Push onto Fake ROB
          fifoPush( dsP->fakeRobP, instP );
          // Add instruction to dispatchList
          fifoPush( dsP->dispatchList, instP );
+
       } else{
          return TRUE;
       }

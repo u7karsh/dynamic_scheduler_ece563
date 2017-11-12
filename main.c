@@ -45,12 +45,19 @@ int main( int argc, char** argv )
    char traceFile[128];
    int s                   = atoi( argv[1] );
    int n                   = atoi( argv[2] );
-   sprintf( traceFile, "%s", argv[3] );
+   int blockSize           = atoi( argv[3] );
+   int l1Size              = atoi( argv[4] );
+   int l1Assoc             = atoi( argv[5] );
+   int l2Size              = atoi( argv[6] );
+   int l2Assoc             = atoi( argv[7] );
+   sprintf( traceFile, "%s", argv[8] );
 
    FILE* fp                = fopen( traceFile, "r" ); 
    ASSERT(!fp, "Unable to read file: %s\n", traceFile);
 
-   dsPT dsP                = dynamicSchedulerInit( "DS", fp, s, n, doTrace );
+   dsPT dsP                = dynamicSchedulerInit( "DS", fp, s, n, doTrace, blockSize, l1Size, l1Assoc, l2Size, l2Assoc );
    while( !dsProcess( dsP ) );
+   cachePrintContents( dsP->l1P );
+   cachePrintContents( dsP->l2P );
 
 }

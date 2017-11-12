@@ -16,6 +16,7 @@
 
 #include "all.h"
 #include "fifo.h"
+#include "cache.h"
 
 // Mask for 32 bit address
 #define   MSB_ONE_32_BIT    0x80000000
@@ -49,6 +50,8 @@ typedef struct _dsT{
    int                   ready[128];
    int                   mapTable[128];
    int                   cycle;
+   cachePT               l1P;
+   cachePT               l2P;
 
    // Circular FIFO
    fifoPT                fakeRobP;
@@ -77,6 +80,8 @@ typedef struct _dsInstInfoT{
    int                 origSrc1;
    int                 origSrc2;
    int                 dst;
+   int                 delay;
+   int                 mem;
 
    int                 src1Ready;    // Src1 ready state
    int                 src2Ready;    // Src2 ready state
@@ -112,7 +117,12 @@ dsPT  dynamicSchedulerInit(
          FILE*              fp,
          int                s,
          int                n,
-         boolean            (*fetchFP)( dsPT, int*, int*, int*, int*, int*, int* ) 
+         boolean            (*fetchFP)( dsPT, int*, int*, int*, int*, int*, int* ), 
+         int                blockSize,
+         int                l1Size,
+         int                l1Assoc,
+         int                l2Size,
+         int                l2Assoc
       );
 
 boolean dsProcess( dsPT dsP );
