@@ -18,6 +18,7 @@ fifoPT  fifoInit()
    ASSERT( !fifoP, "Unable to create FIFO" );
 
    fifoP->head                       = NULL;
+   fifoP->tail                       = NULL;
    fifoP->numElems                   = 0;
 
    return fifoP;
@@ -30,6 +31,7 @@ fifoCellPT fifoCreateCell( void* payload )
    ASSERT( !cellP, "Unable to create FIFO cells" );
 
    cellP->next                       = NULL;
+   cellP->prev                       = NULL;
    cellP->payload                    = payload;
    return cellP;
 }
@@ -41,7 +43,11 @@ void fifoPush( fifoPT fifoP, void* payload )
 
    // Add newly created node to head
    cellP->next                       = fifoP->head;
+   if( fifoP->head != NULL )
+      fifoP->head->prev              = cellP;
    fifoP->head                       = cellP;
+   if( fifoP->tail == NULL )
+      fifoP->tail                    = fifoP->head;
    fifoP->numElems++;
 }
 
@@ -58,12 +64,39 @@ void* fifoPop( fifoPT fifoP )
 
    // Update head
    fifoP->head                       = fifoP->head->next;
+   if( fifoP->head != NULL )
+      fifoP->head->prev              = NULL;
+   else
+      fifoP->tail                    = NULL;
 
    // Free the deleted link
    free( cellP );
    fifoP->numElems--;
-   if( fifoP->numElems == 0 )
+
+   return payload;
+}
+
+void* fifoPopTail( fifoPT fifoP )
+{
+   // Check underflow
+   if( fifoP->numElems == 0 ) return NULL;
+
+   // Get payload
+   void* payload                     = fifoP->tail->payload;
+   
+   // Store the pointer to tail
+   fifoCellPT cellP                  = fifoP->tail;
+
+   // Update tail
+   fifoP->tail                       = fifoP->tail->prev;
+   if( fifoP->tail != NULL )
+      fifoP->tail->next              = NULL;
+   else
       fifoP->head                    = NULL;
+
+   // Free the deleted link
+   free( cellP );
+   fifoP->numElems--;
 
    return payload;
 }
@@ -78,6 +111,143 @@ void* fifoPopConditional( fifoPT fifoP, boolean* success, boolean (*funcP)() )
       return fifoPop( fifoP );
    }
    return NULL;
+}
+
+void* fifoPopTailConditional( fifoPT fifoP, boolean* success, boolean (*funcP)() )
+{
+   *success    = FALSE;
+   if( !fifoP || !fifoP->tail ) return NULL;
+
+   if( funcP( fifoP->tail->payload ) ){
+      *success = TRUE;
+      return fifoPopTail( fifoP );
+   }
+   return NULL;
+}
+
+// For each
+int fifoForeach( fifoPT fifoP, void (*funcOpP)(), void* userData )
+{
+   if( !fifoP || !fifoP->head ) return 0;
+
+   fifoCellPT temp      = fifoP->head;
+   int cnt = 0;
+   while( temp != NULL ){
+      funcOpP( userData, temp->payload );
+      temp              = temp->next;
+      cnt++;
+   }
+   return cnt;
+}
+
+int fifoForeachInv( fifoPT fifoP, void (*funcOpP)(), void* userData )
+{
+   if( !fifoP || !fifoP->tail ) return 0;
+
+   fifoCellPT temp      = fifoP->tail;
+   int cnt = 0;
+   while( temp != NULL ){
+      funcOpP( userData, temp->payload );
+      temp              = temp->prev;
+      cnt++;
+   }
+   return cnt;
+}
+
+// Search, operate (dealloc payload) and remove
+int fifoSearchOpRemove( fifoPT fifoP, boolean (*funcCondP)(), void (*funcOpP)(), void* userData, boolean breakOnFind )
+{
+   if( !fifoP || !fifoP->head ) return 0;
+   int count            = 0;
+
+   fifoCellPT temp      = fifoP->head;
+   while( temp != NULL ){
+      // Search
+      if( funcCondP( userData, temp->payload ) ){
+         if( funcOpP != NULL )
+            funcOpP( userData, temp->payload );
+
+         // Remove
+         // Unlink the node
+         fifoCellPT delCell     = temp;
+
+         if( delCell->prev != NULL ){
+            delCell->prev->next = delCell->next;
+         } else {
+            // Node to be deleted is the head node
+            fifoP->head         = delCell->next;
+            if( fifoP->head != NULL )
+               fifoP->head->prev= NULL;
+         }
+
+         if( delCell->next != NULL ){
+            delCell->next->prev = delCell->prev;
+         } else{
+            // Node to be deleted is the tail node
+            fifoP->tail         = delCell->prev;
+            if( fifoP->tail != NULL )
+               fifoP->tail->next   = NULL;
+         }
+
+         // Update temp to continue iteration
+         temp                   = delCell->next;
+         free( delCell );
+         count++;
+         fifoP->numElems--;
+         if( breakOnFind ) break;
+      } else{
+         temp              = temp->next;
+      }
+   }
+   return count;
+}
+
+// Search, operate (dealloc payload) and remove
+int fifoSearchOpRemoveInv( fifoPT fifoP, boolean (*funcCondP)(), void (*funcOpP)(), void* userData, boolean breakOnFind )
+{
+   if( !fifoP || !fifoP->head ) return 0;
+   int count            = 0;
+
+   fifoCellPT temp      = fifoP->tail;
+   while( temp != NULL ){
+      // Search
+      if( funcCondP( userData, temp->payload ) ){
+         if( funcOpP != NULL )
+            funcOpP( userData, temp->payload );
+
+         // Remove
+         // Unlink the node
+         fifoCellPT delCell     = temp;
+
+         if( delCell->prev != NULL ){
+            delCell->prev->next = delCell->next;
+         } else {
+            // Node to be deleted is the head node
+            fifoP->head         = delCell->next;
+            if( fifoP->head != NULL )
+               fifoP->head->prev= NULL;
+         }
+
+         if( delCell->next != NULL ){
+            delCell->next->prev = delCell->prev;
+         } else{
+            // Node to be deleted is the tail node
+            fifoP->tail         = delCell->prev;
+            if( fifoP->tail != NULL )
+               fifoP->tail->next   = NULL;
+         }
+
+         // Update temp to continue iteration
+         temp                   = delCell->prev;
+         free( delCell );
+         count++;
+         fifoP->numElems--;
+         if( breakOnFind ) break;
+      } else{
+         temp              = temp->prev;
+      }
+   }
+   return count;
 }
 
 void* fifoPeekNth( fifoPT fifoP, int n, boolean* success )
