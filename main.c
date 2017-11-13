@@ -13,6 +13,9 @@
 #include "all.h"
 #include "ds.h"
 
+int numInstructions = 0;
+
+// Trace function to be mapped with init
 boolean doTrace( dsPT dsP, int* pcP, int* operationP, int* dstP, int* src1P, int* src2P, int* memP )
 {
    int pc, operation, dst, src1, src2, mem;
@@ -35,6 +38,7 @@ boolean doTrace( dsPT dsP, int* pcP, int* operationP, int* dstP, int* src1P, int
       *src1P      = src1;
       *src2P      = src2;
       *memP       = mem;
+      numInstructions++;
       return TRUE;
    }
    return FALSE;
@@ -57,7 +61,20 @@ int main( int argc, char** argv )
 
    dsPT dsP                = dynamicSchedulerInit( "DS", fp, s, n, doTrace, blockSize, l1Size, l1Assoc, l2Size, l2Assoc );
    while( !dsProcess( dsP ) );
+
    cachePrintContents( dsP->l1P );
    cachePrintContents( dsP->l2P );
+
+   // Print coniguration of dsP
+   printf("CONFIGURATION\n");
+   printf(" superscalar bandwidth (N) = %d\n", dsP->n);
+   printf(" dispatch queue size (2*N) = %d\n", 2*dsP->n);
+   printf(" schedule queue size (S)   = %d\n", dsP->s);
+   printf("RESULTS\n");
+   printf(" number of instructions = %d\n", numInstructions);
+   // Cycle - 1 as it stands one ahead
+   int cycles              = dsP->cycle - 1;
+   printf(" number of cycles       = %d\n", cycles);
+   printf(" IPC                    = %0.2f\n", (double)numInstructions / (double)(cycles));
 
 }

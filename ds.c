@@ -12,12 +12,6 @@
 
 #include "ds.h"
 
-// Since this is a small proj, add all utils in this
-// file instead of a separate file
-//-------------- UTILITY BEGIN -----------------
-
-//-------------- UTILITY END   -----------------
-
 // Allocates and inits all internal variables
 dsPT  dynamicSchedulerInit(   
          char*              name, 
@@ -75,20 +69,11 @@ boolean dsProcess( dsPT dsP )
    return result;
 }
 
+// If instruction is in execute, check if it has executed
 boolean dsInstInEx( dsPT dsP, dsInstInfoPT  instP )
 {
-   // If instruction is in execute,
-   // Type 0 takes 0 cycles
-   // Type 1 takes 2 cycles
-   // Type 2 takes 5 cycles
    if( instP->stage == PROC_PIPE_STAGE_EX ){
-      if( instP->type == 0 ){
-         return TRUE;
-      } else if( instP->type == 1 ){
-         return ((dsP->cycle - instP->exStart) >= 2) ? TRUE : FALSE;
-      } else{
-         return ((dsP->cycle - instP->exStart) >= instP->delay) ? TRUE : FALSE;
-      }
+      return ((dsP->cycle - instP->exStart) >= instP->latency) ? TRUE : FALSE;
    }
    return FALSE;
 }
@@ -109,7 +94,6 @@ boolean fakeRetire( dsPT dsP )
       dsInstInfoPT infoP = fifoPopTailConditional( dsP->fakeRobP, &success, dsInstInWB );
       if( success ){
          printf("%d fu{%d} src{%d,%d} dst{%d} IF{%d,%d} ID{%d,%d} IS{%d,%d} EX{%d,%d} WB{%d,%d}\n",
-               //infoP->sequenceNum, infoP->type, infoP->src1, infoP->src2, infoP->dst,
                infoP->sequenceNum, infoP->type, infoP->origSrc1, infoP->origSrc2, infoP->dst,
                infoP->ifStart, infoP->ifDuration,
                infoP->idStart, infoP->idDuration,
@@ -205,27 +189,36 @@ boolean issue( dsPT dsP )
    }
    fifoForeach( dsP->issueList, dsIssuer, dsP );
 
-   // If execute list is not full
-   //TODO
-   int iss = 0;
-   while( /*fifoNumElems( dsP->executeList )*/ iss < dsP->n && fifoNumElems( dsP->tempQ ) > 0 ){
+   // FUs are pipelined and can take upto N instructions every cycle
+   // NOTE: Do not limit executions based on size of executeList as FUs are pipelined
+   int iss              = 0;
+   while( iss < dsP->n && fifoNumElems( dsP->tempQ ) > 0 ){
       dsInstInfoPT instP= fifoPop( dsP->tempQ );
       iss++;
       instP->isDuration = dsP->cycle - instP->isStart;
       instP->exStart    = dsP->cycle;
       instP->stage      = PROC_PIPE_STAGE_EX;
+
       // Memory operation on cache
-      if( instP->type == 2 ){
-         cacheCommT comm = cacheCommunicate( dsP->l1P, instP->mem, CMD_DIR_READ );
+      // NOTE: cacheCommunicate is smart enough to return miss if no cache is present
+      // ----------------- CACHE PLUGIN BEGIN -------------------
+      if( instP->type == PROC_INST_TYPE2 && dsP->l1P != NULL ){
+         cacheCommT comm          = cacheCommunicate( dsP->l1P, instP->mem, CMD_DIR_READ );
          if( !comm.hit ){
-            cacheCommT comm = cacheCommunicate( dsP->l2P, instP->mem, CMD_DIR_READ );
+            // L1 Miss
+            instP->latency        = PIPE_EX_LATENCY_L1MISS;
+            comm                  = cacheCommunicate( dsP->l2P, instP->mem, CMD_DIR_READ );
             if( !comm.hit ){
-               instP->delay       = 20;
-            }else{
-               instP->delay       = 10;
+               // L2 Miss
+               instP->latency     = PIPE_EX_LATENCY_L2MISS;
             }
+         } else{
+            // L1 Hit
+            instP->latency        = PIPE_EX_LATENCY_L1HIT;
          }
       }
+      // ----------------- CACHE PLUGIN END ---------------------
+
       fifoPush( dsP->executeList, instP );
       // Remove from dispatch list
       fifoSearchOpRemove( dsP->issueList, dsInstSeqNum, NULL, &(instP->sequenceNum), TRUE );
@@ -352,14 +345,20 @@ boolean fetch( dsPT dsP )
          instP->src2        = src2;
          instP->origSrc1    = src1;
          instP->origSrc2    = src2;
-         instP->delay       = 5;
          instP->mem         = mem;
          instP->sequenceNum = dsP->seqNum++;
+
+         // Assign execution latency based on operation type
+         switch( operation ){
+            case PROC_INST_TYPE0: instP->latency = PIPE_EX_LATENCY_TYPE0; break;
+            case PROC_INST_TYPE1: instP->latency = PIPE_EX_LATENCY_TYPE1; break;
+            default             : instP->latency = PIPE_EX_LATENCY_TYPE2; break;
+         }
+
          // Push onto Fake ROB
          fifoPush( dsP->fakeRobP, instP );
          // Add instruction to dispatchList
          fifoPush( dsP->dispatchList, instP );
-
       } else{
          return TRUE;
       }

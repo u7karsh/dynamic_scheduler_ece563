@@ -9,6 +9,7 @@
 * CHANGES :
 *                     Added Support to multi level cache : UM : 20 Sep 17
 *                     Added Victim cache                 : UM : 26 Sep 17
+*                     Fixed NULL tray crash              : UM : 12 Nov 17
 *
 *H***********************************************************************/
 
@@ -555,15 +556,18 @@ void cachePrettyPrintConfig( cachePT cacheP )
 void cachePrintContents( cachePT cacheP )
 {
    if( !cacheP ) return;
-   printf("===== %s contents =====\n", cacheP->name);
+   printf("%s CACHE CONTENTS\n", cacheP->name);
+   printf("a. number of accesses :%d\n", cacheP->readHitCount + cacheP->readMissCount + cacheP->writeHitCount + cacheP->writeMissCount);
+   printf("b. number of misses :%d\n", cacheP->readMissCount + cacheP->writeMissCount);
    for( int setIndex = 0; setIndex < cacheP->nSets; setIndex++ ){
-      printf("set\t\t%d:\t\t", setIndex);
+      printf("set %d :", setIndex);
       tagPT *rowP = cacheP->tagStoreP[setIndex]->rowP;
       for( int assocIndex = 0; assocIndex < cacheP->assoc; assocIndex++ ){
          printf("%x %c\t", rowP[assocIndex]->tag, (rowP[assocIndex]->dirty) ? 'D' : ' ' );
       }
       printf("\n");
    }
+   printf("\n");
 }
 
 inline int cacheGetWBCount( cachePT cacheP )

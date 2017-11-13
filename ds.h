@@ -18,15 +18,22 @@
 #include "fifo.h"
 #include "cache.h"
 
-// Mask for 32 bit address
-#define   MSB_ONE_32_BIT    0x80000000
+// Execution latencies
+#define PIPE_EX_LATENCY_TYPE0 0
+#define PIPE_EX_LATENCY_TYPE1 2
+#define PIPE_EX_LATENCY_TYPE2 5
+
+// Memory latencies
+#define PIPE_EX_LATENCY_L1HIT  5
+#define PIPE_EX_LATENCY_L1MISS 10
+#define PIPE_EX_LATENCY_L2MISS 20
 
 // Pointer translations
 typedef  struct  _dsT                 *dsPT;
 typedef  struct  _dsInstInfoT         *dsInstInfoPT;
 typedef  struct  _dsCapsuleT          *dsCapsulePT;
 
-// Emums
+// Emums for pipeline stages
 typedef enum{
    PROC_PIPE_STAGE_IF   = 0,
    PROC_PIPE_STAGE_ID   = 1,
@@ -34,6 +41,12 @@ typedef enum{
    PROC_PIPE_STAGE_EX   = 3,
    PROC_PIPE_STAGE_WB   = 4
 }procPipeStageT;
+
+typedef enum{
+   PROC_INST_TYPE0      = 0,
+   PROC_INST_TYPE1      = 1,
+   PROC_INST_TYPE2      = 2
+}procInstructionT;
 
 // Dynamic Instruction Scheduler structure.
 typedef struct _dsT{
@@ -80,7 +93,7 @@ typedef struct _dsInstInfoT{
    int                 origSrc1;
    int                 origSrc2;
    int                 dst;
-   int                 delay;
+   int                 latency;
    int                 mem;
 
    int                 src1Ready;    // Src1 ready state
@@ -125,16 +138,19 @@ dsPT  dynamicSchedulerInit(
          int                l2Assoc
       );
 
-boolean dsProcess( dsPT dsP );
-boolean dsInstInEx( dsPT dsP, dsInstInfoPT  instP );
-boolean dsInstInWB( dsInstInfoPT  instP );
-boolean fakeRetire( dsPT dsP );
-boolean execute( dsPT dsP );
-void dsIssuer( dsPT dsP,  dsInstInfoPT instP );
-boolean issue( dsPT dsP );
-void dsDispatcher( dsPT dsP,  dsInstInfoPT instP );
-boolean dsInstSeqNum( int* seqNum, dsInstInfoPT instP );
-boolean dispatch( dsPT dsP );
-boolean fetch( dsPT dsP );
+boolean    dsProcess( dsPT dsP );
+boolean    dsInstInEx( dsPT dsP, dsInstInfoPT  instP );
+boolean    dsInstInWB( dsInstInfoPT  instP );
+boolean    fakeRetire( dsPT dsP );
+void       dsWakeup( int *reg,  dsInstInfoPT instP );
+void       dsSearchDst( int *dstFlag,  dsInstInfoPT instP );
+void       dsExFinish( dsPT dsP, dsInstInfoPT instP );
+boolean    execute( dsPT dsP );
+void       dsIssuer( dsPT dsP,  dsInstInfoPT instP );
+boolean    issue( dsPT dsP );
+void       dsDispatcher( dsPT dsP,  dsInstInfoPT instP );
+boolean    dsInstSeqNum( int* seqNum, dsInstInfoPT instP );
+boolean    dispatch( dsPT dsP );
+boolean    fetch( dsPT dsP );
 
 #endif

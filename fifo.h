@@ -16,9 +16,6 @@
 
 #include "all.h"
 
-// Mask for 32 bit address
-#define   MSB_ONE_32_BIT    0x80000000
-
 // Pointer translations
 typedef  struct  _fifoT                 *fifoPT;
 typedef  struct  _fifoCellT             *fifoCellPT;
